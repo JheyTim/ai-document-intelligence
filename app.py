@@ -1,127 +1,210 @@
+import hashlib
 import io
+import json
 
 import openai
 import streamlit as st
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 
-from services.openai_service import extract_text_from_image
-
-# Page configuration
-st.set_page_config(
-    page_title="OpenAI OCR",
-    page_icon="📄",
-    layout="wide",
-    initial_sidebar_state="expanded",
+from services.openai_service import (
+    MODEL,
+    extract_document_from_image,
+    format_ocr_as_markdown,
 )
 
-# Application title
-st.title("📄 OpenAI OCR")
+# =========================================
+# 1. Page configuration
+# =========================================
 
-st.markdown("Extract structured text from images using an OpenAI vision model.")
+st.set_page_config(page_title="OpenAI OCR", page_icon="📄", layout="wide")
 
-st.caption("Model: GPT-6 Luna")
 
-st.markdown("---")
+# =========================================
+# 2. Application heading
+# =========================================
 
-# Clear button
-col1, col2 = st.columns([6, 1])
+st.title("📄 AI Document Intelligence")
+st.write("Extract document text, key information, and tables using OpenAI.")
 
-with col2:
-    if st.button("Clear 🗑️"):
-        st.session_state.pop("ocr_result", None)
-        st.session_state.pop("ocr_filename", None)
+st.caption(f"Vision model: {MODEL}")
 
-        st.rerun()
+st.divider()
 
-# Image uploader
+
+# =========================================
+# 3. Clear previous results
+# =========================================
+
+if st.button("Clear results 🗑️"):
+    for key in ("ocr_data", "ocr_markdown", "ocr_filename", "active_image_hash"):
+        st.session_state.pop(key, None)
+
+    st.rerun()
+
+
+# =========================================
+# 4. Image uploader
+# =========================================
+
 with st.sidebar:
-    st.header("Upload Image")
+    st.header("Upload Document")
 
-    uploaded_file = st.file_uploader("Choose an image...", type=["png", "jpg", "jpeg"])
+    uploaded_file = st.file_uploader(
+        "Choose an image", type=["png", "jpg", "jpeg", "webp"]
+    )
 
-    if uploaded_file is not None:
-        # Retrieve image bytes
-        image_bytes = uploaded_file.getvalue()
 
-        mime_type = uploaded_file.type
+if uploaded_file is not None:
+    image_bytes = uploaded_file.getvalue()
 
-        # Display image preview
-        try:
-            image = Image.open(io.BytesIO(image_bytes))
+    # Identify the actual image format
+    try:
+        preview = Image.open(io.BytesIO(image_bytes))
 
-            st.image(image, caption=uploaded_file.name, use_container_width=True)
+        image_format = preview.format
 
-        except (Image.UnidentifiedImageError, OSError):
-            st.error("The uploaded file is not a valid image.")
+        preview.verify()
 
+        format_to_mime = {
+            "JPEG": "image/jpeg",
+            "PNG": "image/png",
+            "WEBP": "image/webp",
+        }
+
+        mime_type = format_to_mime.get(image_format)
+
+        if mime_type is None:
+            st.error("Unsupported image format.")
             st.stop()
 
-        # Extract text button
-        if st.button("Extract Text 🔍", type="primary"):
-            with st.spinner("Analyzing image with OpenAI..."):
-                try:
-                    # Call our OpenAI service
-                    extracted_text = extract_text_from_image(
-                        image_bytes=image_bytes, mime_type=mime_type
-                    )
+        # Reopen after verify() for image display
+        preview = Image.open(io.BytesIO(image_bytes))
 
-                    # Store result in session state
-                    st.session_state["ocr_result"] = extracted_text
+    except (UnidentifiedImageError, OSError):
+        st.error("The uploaded file is not a valid image.")
+        st.stop()
 
-                    st.session_state["ocr_filename"] = uploaded_file.name
+    # Clear stale results if another image is selected
+    image_hash = hashlib.sha256(image_bytes).hexdigest()
 
-                    st.success("Text extraction completed!")
+    if st.session_state.get("active_image_hash") != image_hash:
+        for key in ("ocr_data", "ocr_markdown", "ocr_filename"):
+            st.session_state.pop(key, None)
 
-                # Error handling
-                except ValueError as error:
-                    st.error(str(error))
+        st.session_state["active_image_hash"] = image_hash
 
-                except RuntimeError as error:
-                    st.error(str(error))
+    # Display image preview
+    st.sidebar.subheader("Image Preview")
 
-                except openai.AuthenticationError:
-                    st.error("Authentication failed. Check your OpenAI API key.")
+    st.sidebar.image(preview, caption=uploaded_file.name, use_container_width=True)
 
-                except openai.RateLimitError:
-                    st.error(
-                        "API rate or usage limit reached. "
-                        "Check your OpenAI API usage and billing."
-                    )
+    st.sidebar.caption(f"File size: {len(image_bytes):,} bytes")
 
-                except openai.APIConnectionError:
-                    st.error(
-                        "Could not connect to OpenAI. Check your internet connection."
-                    )
+    # =====================================
+    # 5. Run structured OCR
+    # =====================================
 
-                except openai.APIStatusError as error:
-                    st.error(f"OpenAI API error: HTTP {error.status_code}")
+    if st.sidebar.button("Extract Structured Text 🔍", type="primary"):
+        with st.spinner("Analyzing document with OpenAI..."):
+            try:
+                # Get structured JSON data
+                document_data = extract_document_from_image(
+                    image_bytes=image_bytes, mime_type=mime_type
+                )
 
-                    st.caption(str(error.message))
+                # Convert the structured data to Markdown
+                markdown_result = format_ocr_as_markdown(document_data)
 
-                except openai.APIError as error:
-                    st.error(f"OpenAI SDK error: {error}")
+                # Store results
+                st.session_state["ocr_data"] = document_data
+                st.session_state["ocr_markdown"] = markdown_result
+                st.session_state["ocr_filename"] = uploaded_file.name
+
+                st.success("Document extraction completed!")
+
+            except ValueError as error:
+                st.error(str(error))
+
+            except RuntimeError as error:
+                st.error(str(error))
+
+            except openai.AuthenticationError:
+                st.error("Authentication failed. Check your OpenAI API key.")
+
+            except openai.RateLimitError:
+                st.error(
+                    "API rate or usage limit reached. Check your API usage and billing."
+                )
+
+            except openai.APIConnectionError:
+                st.error("Could not connect to OpenAI. Check your internet connection.")
+
+            except openai.APIStatusError as error:
+                st.error(f"OpenAI API error: HTTP {error.status_code}")
+
+                st.caption(str(error.message))
+
+            except openai.APIError as error:
+                st.error(f"OpenAI SDK error: {error}")
 
 
-# Display extracted text
-if "ocr_result" in st.session_state:
-    st.subheader("Extracted Text")
+# =========================================
+# 6. Display OCR results
+# =========================================
 
-    st.caption("Source image: " + st.session_state.get("ocr_filename", "Unknown"))
+if "ocr_data" in st.session_state:
+    st.subheader("OCR Results")
 
-    st.markdown(st.session_state["ocr_result"])
+    st.caption(f"Source document: {st.session_state['ocr_filename']}")
 
-    # Download extracted text
-    st.download_button(
-        label="Download OCR Result",
-        data=st.session_state["ocr_result"],
-        file_name="extracted_text.md",
-        mime="text/markdown",
-    )
+    markdown_tab, json_tab = st.tabs(["Formatted Markdown", "Structured JSON"])
+
+    # Markdown display
+    with markdown_tab:
+        st.markdown(st.session_state["ocr_markdown"])
+
+    # JSON display
+    with json_tab:
+        st.json(st.session_state["ocr_data"])
+
+    st.divider()
+
+    # =================================
+    # 7. Download results
+    # =================================
+
+    markdown_col, json_col = st.columns(2)
+
+    with markdown_col:
+        st.download_button(
+            label="Download Markdown",
+            data=st.session_state["ocr_markdown"],
+            file_name="ocr_result.md",
+            mime="text/markdown",
+            use_container_width=True,
+        )
+
+    with json_col:
+        json_result = json.dumps(
+            st.session_state["ocr_data"], ensure_ascii=False, indent=2
+        )
+
+        st.download_button(
+            label="Download JSON",
+            data=json_result,
+            file_name="ocr_result.json",
+            mime="application/json",
+            use_container_width=True,
+        )
+
 else:
-    st.info("Upload an image and click 'Extract Text' to see the results here.")
+    st.info("Upload a document image and click 'Extract Structured Text' to begin.")
 
 
-# Footer
-st.markdown("---")
+# =========================================
+# 8. Footer
+# =========================================
 
-st.caption("Made with Python, Streamlit, and the OpenAI API.")
+st.divider()
+
+st.caption("Built with Python, Streamlit, and the OpenAI Responses API.")
