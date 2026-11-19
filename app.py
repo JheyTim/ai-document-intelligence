@@ -13,14 +13,14 @@ from services.openai_service import (
 )
 
 # =========================================
-# 1. Page configuration
+# Page configuration
 # =========================================
 
 st.set_page_config(page_title="OpenAI OCR", page_icon="📄", layout="wide")
 
 
 # =========================================
-# 2. Application heading
+# Application heading
 # =========================================
 
 st.title("📄 AI Document Intelligence")
@@ -32,7 +32,7 @@ st.divider()
 
 
 # =========================================
-# 3. Clear previous results
+# Clear previous results
 # =========================================
 
 if st.button("Clear results 🗑️"):
@@ -43,11 +43,17 @@ if st.button("Clear results 🗑️"):
 
 
 # =========================================
-# 4. Image uploader
+# Image uploader
 # =========================================
 
 with st.sidebar:
     st.header("Upload Document")
+
+    st.header("Upload Document")
+
+    document_profile = st.selectbox(
+        "Document type", ["General document", "Receipt", "Invoice", "Form", "Letter"]
+    )
 
     uploaded_file = st.file_uploader(
         "Choose an image", type=["png", "jpg", "jpeg", "webp"]
@@ -84,14 +90,16 @@ if uploaded_file is not None:
         st.error("The uploaded file is not a valid image.")
         st.stop()
 
-    # Clear stale results if another image is selected
-    image_hash = hashlib.sha256(image_bytes).hexdigest()
+    # Clear stale results if another file is selected
+    request_hash = hashlib.sha256(
+        image_bytes + b"\0" + document_profile.encode("utf-8")
+    ).hexdigest()
 
-    if st.session_state.get("active_image_hash") != image_hash:
+    if st.session_state.get("active_request_hash") != request_hash:
         for key in ("ocr_data", "ocr_markdown", "ocr_filename"):
             st.session_state.pop(key, None)
 
-        st.session_state["active_image_hash"] = image_hash
+        st.session_state["active_request_hash"] = request_hash
 
     # Display image preview
     st.sidebar.subheader("Image Preview")
@@ -101,7 +109,7 @@ if uploaded_file is not None:
     st.sidebar.caption(f"File size: {len(image_bytes):,} bytes")
 
     # =====================================
-    # 5. Run structured OCR
+    # Run structured OCR
     # =====================================
 
     if st.sidebar.button("Extract Structured Text 🔍", type="primary"):
@@ -109,7 +117,9 @@ if uploaded_file is not None:
             try:
                 # Get structured JSON data
                 document_data = extract_document_from_image(
-                    image_bytes=image_bytes, mime_type=mime_type
+                    image_bytes=image_bytes,
+                    mime_type=mime_type,
+                    document_profile=document_profile,
                 )
 
                 # Convert the structured data to Markdown
@@ -119,6 +129,7 @@ if uploaded_file is not None:
                 st.session_state["ocr_data"] = document_data
                 st.session_state["ocr_markdown"] = markdown_result
                 st.session_state["ocr_filename"] = uploaded_file.name
+                st.session_state["ocr_profile"] = document_profile
 
                 st.success("Document extraction completed!")
 
@@ -149,13 +160,14 @@ if uploaded_file is not None:
 
 
 # =========================================
-# 6. Display OCR results
+# Display OCR results
 # =========================================
 
 if "ocr_data" in st.session_state:
     st.subheader("OCR Results")
 
     st.caption(f"Source document: {st.session_state['ocr_filename']}")
+    st.caption(f"Extraction profile: {st.session_state.get('ocr_profile', 'Unknown')}")
 
     markdown_tab, json_tab = st.tabs(["Formatted Markdown", "Structured JSON"])
 
@@ -170,7 +182,7 @@ if "ocr_data" in st.session_state:
     st.divider()
 
     # =================================
-    # 7. Download results
+    # Download results
     # =================================
 
     markdown_col, json_col = st.columns(2)
@@ -202,7 +214,7 @@ else:
 
 
 # =========================================
-# 8. Footer
+# Footer
 # =========================================
 
 st.divider()
