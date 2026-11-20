@@ -11,6 +11,7 @@ from services.openai_service import (
     extract_document_from_image,
     format_ocr_as_markdown,
 )
+from services.validation import validate_document_content, validate_document_structure
 
 # =========================================
 # Page configuration
@@ -121,6 +122,29 @@ if uploaded_file is not None:
                     mime_type=mime_type,
                     document_profile=document_profile,
                 )
+
+                # Check JSON structure against our schema
+                validation_errors = validate_document_structure(document_data)
+
+                if validation_errors:
+                    error_details = "\n".join(validation_errors)
+
+                    raise RuntimeError(
+                        "The extracted document failed validation:\n" + error_details
+                    )
+
+                # Check additional content rules
+                validation_warnings = validate_document_content(document_data)
+
+                if validation_warnings:
+                    st.warning(
+                        "The Document was extracted, but some content checks raised warnings."
+                    )
+
+                    for warning in validation_warnings:
+                        st.write(f"- {warning}")
+                else:
+                    st.success("Document structure and content checks passed.")
 
                 # Convert the structured data to Markdown
                 markdown_result = format_ocr_as_markdown(document_data)

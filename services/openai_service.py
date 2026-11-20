@@ -16,7 +16,10 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 
 load_dotenv(BASE_DIR / ".env")
 
-MODEL = "gpt-6-luna"
+MODEL = os.getenv("OPENAI_MODEL")
+
+if not MODEL:
+    raise RuntimeError("OPENAI_MODEL is not configured in .env")
 
 ALLOWED_MIME_TYPES = {
     "image/jpeg",
@@ -157,6 +160,15 @@ def extract_document_from_image(
             f"Status: {response.status}. "
             f"Details: {response.incomplete_details}"
         )
+
+    # Detect a model refusal
+    for output_item in response.output:
+        if output_item.type == "message":
+            for content_item in output_item.content:
+                if content_item.type == "refusal":
+                    raise RuntimeError(
+                        "The model refused the request: " + content_item.refusal
+                    )
 
     # Read the JSON response
     output = response.output_text
