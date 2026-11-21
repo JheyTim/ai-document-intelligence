@@ -207,7 +207,6 @@ Extract metadata as key-value pairs when appropriate.
 
 
 def build_ocr_instructions(document_profile: str) -> str:
-
     if document_profile not in DOCUMENT_PROFILES:
         raise ValueError(f"Unsupported document profile: {document_profile}")
 

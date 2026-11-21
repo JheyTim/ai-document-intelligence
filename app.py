@@ -1,4 +1,3 @@
-import copy
 import hashlib
 import io
 
@@ -17,10 +16,29 @@ from services.openai_service import (
     extract_document_from_image,
     format_ocr_as_markdown,
 )
+from services.prompts import DOCUMENT_PROFILES
 from services.validation import (
     validate_document_content,
     validate_document_structure,
 )
+
+OCR_RESULT_KEYS = (
+    "ocr_data",
+    "ocr_markdown",
+    "ocr_filename",
+    "ocr_profile",
+)
+ACTIVE_REQUEST_HASH_KEY = "active_request_hash"
+
+
+def clear_ocr_results(*, include_request_hash: bool = False) -> None:
+    keys = OCR_RESULT_KEYS
+    if include_request_hash:
+        keys += (ACTIVE_REQUEST_HASH_KEY,)
+
+    for key in keys:
+        st.session_state.pop(key, None)
+
 
 # =========================================
 # Page configuration
@@ -46,17 +64,7 @@ st.divider()
 # =========================================
 
 if st.button("Clear results 🗑️"):
-    for key in (
-        "ocr_data",
-        "ocr_markdown",
-        "ocr_filename",
-        "ocr_profile",
-        "ocr_key_values",
-        "ocr_tables",
-        "active_request_hash",
-    ):
-        st.session_state.pop(key, None)
-
+    clear_ocr_results(include_request_hash=True)
     st.rerun()
 
 
@@ -67,11 +75,7 @@ if st.button("Clear results 🗑️"):
 with st.sidebar:
     st.header("Upload Document")
 
-    st.header("Upload Document")
-
-    document_profile = st.selectbox(
-        "Document type", ["General document", "Receipt", "Invoice", "Form", "Letter"]
-    )
+    document_profile = st.selectbox("Document type", options=list(DOCUMENT_PROFILES))
 
     uploaded_file = st.file_uploader(
         "Choose an image", type=["png", "jpg", "jpeg", "webp"]
@@ -113,18 +117,9 @@ if uploaded_file is not None:
         image_bytes + b"\0" + document_profile.encode("utf-8")
     ).hexdigest()
 
-    if st.session_state.get("active_request_hash") != request_hash:
-        for key in (
-            "ocr_data",
-            "ocr_markdown",
-            "ocr_filename",
-            "ocr_profile",
-            "ocr_key_values",
-            "ocr_tables",
-        ):
-            st.session_state.pop(key, None)
-
-        st.session_state["active_request_hash"] = request_hash
+    if st.session_state.get(ACTIVE_REQUEST_HASH_KEY) != request_hash:
+        clear_ocr_results()
+        st.session_state[ACTIVE_REQUEST_HASH_KEY] = request_hash
 
     # Display image preview
     st.sidebar.subheader("Image Preview")
@@ -178,8 +173,6 @@ if uploaded_file is not None:
                 st.session_state["ocr_markdown"] = markdown_result
                 st.session_state["ocr_filename"] = uploaded_file.name
                 st.session_state["ocr_profile"] = document_profile
-                st.session_state["ocr_key_values"] = document_data.get("key_values", [])
-                st.session_state["ocr_tables"] = document_data.get("tables", [])
 
                 st.success("Document extraction completed!")
 
@@ -215,7 +208,9 @@ if "ocr_data" in st.session_state:
     # =========================================
     st.subheader("Extracted Key-Value Fields")
 
-    key_values = st.session_state["ocr_key_values"]
+    document_data = st.session_state["ocr_data"]
+    
+    key_values = document_data.get("key_values", [])
 
     if key_values:
         key_value_df = pd.DataFrame(key_values)
@@ -230,7 +225,7 @@ if "ocr_data" in st.session_state:
 
     st.subheader("Extracted Tables")
 
-    tables = st.session_state["ocr_tables"]
+    tables = document_data.get("tables", [])
 
     if tables:
         for table_index, table in enumerate(tables, start=1):
@@ -269,7 +264,7 @@ if "ocr_data" in st.session_state:
 
     # JSON display
     with json_tab:
-        st.json(st.session_state["ocr_data"])
+        st.json(document_data)
 
     st.divider()
 
@@ -279,15 +274,13 @@ if "ocr_data" in st.session_state:
 
     st.subheader("Download Extracted Document")
 
-    st.success("Review confirmed. The approved data is ready.")
-
-    txt_content = document_to_txt(st.session_state["ocr_data"])
+    txt_content = document_to_txt(document_data)
     markdown_content = st.session_state["ocr_markdown"]
-    json_content = document_to_json(st.session_state["ocr_data"])
+    json_content = document_to_json(document_data)
 
-    txt_filename = make_export_filename(st.session_state["ocr_data"], "txt")
-    markdown_filename = make_export_filename(st.session_state["ocr_data"], "md")
-    json_filename = make_export_filename(st.session_state["ocr_data"], "json")
+    txt_filename = make_export_filename(document_data, "txt")
+    markdown_filename = make_export_filename(document_data, "md")
+    json_filename = make_export_filename(document_data, "json")
 
     col1, col2, col3 = st.columns(3)
 

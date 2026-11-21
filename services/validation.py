@@ -2,12 +2,6 @@ from jsonschema import Draft202012Validator
 
 from .openai_service import OCR_SCHEMA
 
-# # Validate the schema itseft
-# def validate_ocr_schema():
-#     Draft202012Validator.check_schema(OCR_SCHEMA)
-
-#     return True
-
 
 # Validate extracted JSON structure
 def validate_document_structure(document_data: dict) -> list[str]:
@@ -56,23 +50,3 @@ def validate_document_content(document_data: dict) -> list[str]:
                 )
 
     return warnings
-
-
-# # Validate JSON text
-# def validate_json_text(json_text: str) -> tuple[dict | None, list[str]]:
-
-#     try:
-#         document_data = json.loads(json_text)
-
-#     except json.JSONDecodeError as error:
-#         return None, [f"Invalid JSON: {error}"]
-
-#     if not isinstance(document_data, dict):
-#         return None, ["The JSON root must be an object."]
-
-#     errors = validate_document_structure(document_data)
-
-#     if errors:
-#         return None, errors
-
-#     return document_data, []
