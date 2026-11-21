@@ -1,4 +1,4 @@
-# OpenAI OCR
+# AI Document Intelligence
 
 A Streamlit app that extracts text and structured information from document
 images using OpenAI's Responses API.
