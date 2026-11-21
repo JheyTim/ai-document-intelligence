@@ -1,12 +1,17 @@
+import copy
 import hashlib
 import io
-import json
 
 import openai
 import pandas as pd
 import streamlit as st
 from PIL import Image, UnidentifiedImageError
 
+from exports.document_export import (
+    document_to_json,
+    document_to_txt,
+    make_export_filename,
+)
 from services.openai_service import (
     MODEL,
     extract_document_from_image,
@@ -272,29 +277,46 @@ if "ocr_data" in st.session_state:
     # Download results
     # =================================
 
-    markdown_col, json_col = st.columns(2)
+    st.subheader("Download Extracted Document")
 
-    with markdown_col:
+    st.success("Review confirmed. The approved data is ready.")
+
+    txt_content = document_to_txt(st.session_state["ocr_data"])
+    markdown_content = st.session_state["ocr_markdown"]
+    json_content = document_to_json(st.session_state["ocr_data"])
+
+    txt_filename = make_export_filename(st.session_state["ocr_data"], "txt")
+    markdown_filename = make_export_filename(st.session_state["ocr_data"], "md")
+    json_filename = make_export_filename(st.session_state["ocr_data"], "json")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.download_button(
+            label="Download TXT",
+            data=txt_content,
+            file_name=txt_filename,
+            mime="text/plain",
+            key="download_txt",
+        )
+
+    with col2:
         st.download_button(
             label="Download Markdown",
-            data=st.session_state["ocr_markdown"],
-            file_name="ocr_result.md",
+            data=markdown_content,
+            file_name=markdown_filename,
             mime="text/markdown",
-            use_container_width=True,
+            key="download_markdown",
         )
-
-    with json_col:
-        json_result = json.dumps(
-            st.session_state["ocr_data"], ensure_ascii=False, indent=2
-        )
-
+    with col3:
         st.download_button(
             label="Download JSON",
-            data=json_result,
-            file_name="ocr_result.json",
+            data=json_content,
+            file_name=json_filename,
             mime="application/json",
-            use_container_width=True,
+            key="download_json",
         )
+
 
 else:
     st.info("Upload a document image and click 'Extract Structured Text' to begin.")

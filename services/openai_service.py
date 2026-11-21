@@ -192,107 +192,95 @@ def extract_document_from_image(
 def _markdown_cell(value: str) -> str:
     """Prepare a value for a Markdown table cell."""
 
-    return str(value).replace("|", "\\|").replace("\r", " ").replace("\n", " ").strip()
+    return (
+        str(value)
+        .replace("|", r"\|")
+        .replace("\r", " ")
+        .replace("\r\n", "\n")
+        .replace("\n", "<br>")
+    )
 
 
-def format_ocr_as_markdown(document: dict) -> str:
+def format_ocr_as_markdown(document_data: dict) -> str:
+    lines = []
 
-    title = document.get("title") or "OCR Result"
+    title = document_data.get("title") or "Untitled Document"
 
-    lines = [
-        f"# {title}",
-        "",
-        f"**Document type:** {document.get('document_type', 'unknown')}",
-        f"**Language:** {document.get('language', '')}",
-        "",
-        "## Full transcription",
-        "",
-    ]
+    lines.append(f"# {title}")
+    lines.append("")
 
-    full_text = document.get("full_text", "").strip()
+    lines.append(f"**Document Type:** {document_data.get('document_type', '')}")
+    lines.append("")
 
-    if full_text:
-        safe_text = full_text.replace("```", "'''\u200b")
-        lines.extend(["```text", safe_text, "```", ""])
-    else:
-        lines.extend(["_No readable text detected._", ""])
+    # Full transcription
+    lines.append("## Full Transcription")
+    lines.append("")
+    lines.append(document_data.get("full_text", ""))
+    lines.append("")
 
     # Key-value fields
-    key_values = document.get("key_values", [])
+    lines.append("## Key-Value Fields")
+    lines.append("")
+    lines.append("| Label | Value |")
+    lines.append("|---|---|")
 
-    if key_values:
-        lines.extend(["## Key information", "", "| Field | Value |", "|---|---|"])
+    for item in document_data.get("key_values", []):
+        label = _markdown_cell(item.get("label", ""))
+        value = _markdown_cell(item.get("value", ""))
 
-        for item in key_values:
-            label = _markdown_cell(item.get("label", ""))
-            value = _markdown_cell(item.get("value", ""))
+        lines.append(f"| {label} | {value} |")
 
-            lines.append(f"| {label} | {value} |")
-
-        lines.append("")
+    lines.append("")
 
     # Tables
-    tables = document.get("tables", [])
+    for table_index, table in enumerate(document_data.get("tables", []), start=1):
+        table_title = table.get("title") or f"Table {table_index}"
 
-    if tables:
-        lines.extend(["## Extracted tables", ""])
+        headers = table.get("headers", [])
+        rows = table.get("rows", [])
 
-        for index, table in enumerate(tables, start=1):
-            table_title = table.get("title") or f"Table {index}"
+        lines.append(f"## {table_title}")
+        lines.append("")
 
-            lines.extend([f"### {table_title}", ""])
+        width = max([len(headers)] + [len(row) for row in rows])
 
-            headers = table.get("headers", [])
-            rows = table.get("rows", [])
-
-            column_count = max(len(headers), max((len(row) for row in rows), default=0))
-
-            if column_count == 0:
-                lines.extend(["_No table cells detected._", ""])
-                continue
-
-            # Add neutral headings if a row has more
-            # columns than the supplied header list.
-            normalized_headers = list(headers)
-
-            while len(normalized_headers) < column_count:
-                normalized_headers.append(f"Column {len(normalized_headers) + 1}")
-
-            normalized_headers = normalized_headers[:column_count]
-
-            lines.append(
-                "| "
-                + " | ".join(_markdown_cell(item) for item in normalized_headers)
-                + " |"
-            )
-
-            lines.append("| " + " | ".join(["---"] * column_count) + " |")
-
-            for row in rows:
-                normalized_row = list(row)
-
-                while len(normalized_row) < column_count:
-                    normalized_row.append("")
-
-                normalized_row = normalized_row[:column_count]
-
-                lines.append(
-                    "| "
-                    + " | ".join(_markdown_cell(item) for item in normalized_row)
-                    + " |"
-                )
-
+        if width == 0:
+            lines.append("_No table cells were extracted._")
             lines.append("")
+            continue
 
-    # Uncertain text
-    uncertain_items = document.get("uncertain_items", [])
+        display_headers = list(headers)
 
-    if uncertain_items:
-        lines.extend(["## Uncertain or unreadable content", ""])
+        while len(display_headers) < width:
+            display_headers.append(f"Unlabeled column {len(display_headers) + 1}")
 
-        for item in uncertain_items:
-            lines.append(f"- {item}")
+        header_text = [_markdown_cell(header) for header in display_headers]
+
+        lines.append("| " + " | ".join(header_text) + " |")
+        lines.append("| " + " | ".join(["---"] * width) + " |")
+
+        for row in rows:
+            cells = list(row)
+
+            while len(cells) < width:
+                cells.append("")
+
+            cell_text = [_markdown_cell(cell) for cell in cells]
+
+            lines.append("| " + " | ".join(cell_text) + " |")
 
         lines.append("")
+
+    # Uncertain items
+    lines.append("## Uncertain Items")
+    lines.append("")
+
+    uncertain_items = document_data.get("uncertain_items", [])
+
+    if uncertain_items:
+        for item in uncertain_items:
+            lines.append(f"- {item}")
+    else:
+        lines.append("None recorded.")
 
     return "\n".join(lines)
