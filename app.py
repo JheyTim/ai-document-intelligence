@@ -15,7 +15,6 @@ from services.openai_service import (
 from services.validation import (
     validate_document_content,
     validate_document_structure,
-    validate_table_consistency,
 )
 
 # =========================================
@@ -42,7 +41,15 @@ st.divider()
 # =========================================
 
 if st.button("Clear results 🗑️"):
-    for key in ("ocr_data", "ocr_markdown", "ocr_filename", "active_image_hash"):
+    for key in (
+        "ocr_data",
+        "ocr_markdown",
+        "ocr_filename",
+        "ocr_profile",
+        "ocr_key_values",
+        "ocr_tables",
+        "active_request_hash",
+    ):
         st.session_state.pop(key, None)
 
     st.rerun()
@@ -102,7 +109,14 @@ if uploaded_file is not None:
     ).hexdigest()
 
     if st.session_state.get("active_request_hash") != request_hash:
-        for key in ("ocr_data", "ocr_markdown", "ocr_filename"):
+        for key in (
+            "ocr_data",
+            "ocr_markdown",
+            "ocr_filename",
+            "ocr_profile",
+            "ocr_key_values",
+            "ocr_tables",
+        ):
             st.session_state.pop(key, None)
 
         st.session_state["active_request_hash"] = request_hash
@@ -129,13 +143,7 @@ if uploaded_file is not None:
                 )
 
                 # Check JSON structure against our schema
-                schema_errors = validate_document_structure(document_data)
-
-                # Validate table consistency
-                table_errors = validate_table_consistency(document_data)
-
-                # Combine errors
-                validation_errors = schema_errors + table_errors
+                validation_errors = validate_document_structure(document_data)
 
                 if validation_errors:
                     error_details = "\n".join(validation_errors)
@@ -148,56 +156,14 @@ if uploaded_file is not None:
                 validation_warnings = validate_document_content(document_data)
 
                 if validation_warnings:
-                    for warning in validation_warnings:
-                        st.warning(f"- {warning}")
-                else:
-                    st.success("Document validation completed successfully.")
-
-                # Display extracted key-value fields
-                st.subheader("Extracted Key-Value fields")
-
-                key_values = document_data.get("key_values", [])
-
-                if key_values:
-                    key_value_data = [
-                        {"Field": item["label"], "Value": item["value"]}
-                        for item in key_values
-                    ]
-
-                    st.dataframe(
-                        pd.DataFrame(key_value_data),
-                        use_container_width=True,
-                        hide_index=True,
+                    st.warning(
+                        "The Document was extracted, but some content checks raised warnings."
                     )
+
+                    for warning in validation_warnings:
+                        st.write(f"- {warning}")
                 else:
-                    st.info("No key-value fields were detected.")
-
-                # Display extracted tables
-                st.subheader("Extracted Tables")
-
-                tables = document_data.get("tables", [])
-
-                if tables:
-                    for index, table in enumerate(tables):
-                        table_title = table.get("title") or f"Table {index + 1}"
-
-                        st.markdown(f"**{table_title}**")
-
-                        headers = table.get("headers", [])
-                        rows = table.get("rows", [])
-
-                        if rows:
-                            table_dataframe = pd.DataFrame(rows, columns=headers)
-
-                            st.dataframe(
-                                table_dataframe,
-                                use_container_width=True,
-                                hide_index=True,
-                            )
-                        else:
-                            st.info("This table contains no extracted data rows.")
-                else:
-                    st.info("No tables were detected.")
+                    st.success("Document structure and content checks passed.")
 
                 # Convert the structured data to Markdown
                 markdown_result = format_ocr_as_markdown(document_data)
@@ -207,6 +173,8 @@ if uploaded_file is not None:
                 st.session_state["ocr_markdown"] = markdown_result
                 st.session_state["ocr_filename"] = uploaded_file.name
                 st.session_state["ocr_profile"] = document_profile
+                st.session_state["ocr_key_values"] = document_data.get("key_values", [])
+                st.session_state["ocr_tables"] = document_data.get("tables", [])
 
                 st.success("Document extraction completed!")
 
@@ -236,11 +204,53 @@ if uploaded_file is not None:
                 st.error(f"OpenAI SDK error: {error}")
 
 
-# =========================================
-# Display OCR results
-# =========================================
-
 if "ocr_data" in st.session_state:
+    # =========================================
+    # Display extracted key-value fields
+    # =========================================
+    st.subheader("Extracted Key-Value Fields")
+
+    key_values = st.session_state["ocr_key_values"]
+
+    if key_values:
+        key_value_df = pd.DataFrame(key_values)
+
+        st.dataframe(key_value_df, use_container_width=True, hide_index=True)
+    else:
+        st.info("No key-value fields were extracted.")
+
+    # =========================================
+    # Display extracted tables
+    # =========================================
+
+    st.subheader("Extracted Tables")
+
+    tables = st.session_state["ocr_tables"]
+
+    if tables:
+        for table_index, table in enumerate(tables, start=1):
+            table_title = table.get("title") or f"Table {table_index}"
+
+            st.markdown(f"### {table_title}")
+
+            headers = table.get("headers", [])
+            rows = table.get("rows", [])
+
+            if headers:
+                table_df = pd.DataFrame(rows, columns=headers)
+
+                st.dataframe(table_df, use_container_width=True, hide_index=True)
+
+            else:
+                st.warning(f"{table_title} has no extracted headers.")
+    else:
+        st.info("No tables were detected.")
+
+    st.divider()
+
+    # =========================================
+    # Display OCR results
+    # =========================================
     st.subheader("OCR Results")
 
     st.caption(f"Source document: {st.session_state['ocr_filename']}")

@@ -4,12 +4,11 @@ from jsonschema import Draft202012Validator
 
 from .openai_service import OCR_SCHEMA
 
+# # Validate the schema itseft
+# def validate_ocr_schema():
+#     Draft202012Validator.check_schema(OCR_SCHEMA)
 
-# Validate the schema itseft
-def validate_ocr_schema():
-    Draft202012Validator.check_schema(OCR_SCHEMA)
-
-    return True
+#     return True
 
 
 # Validate extracted JSON structure
@@ -32,61 +31,50 @@ def validate_document_structure(document_data: dict) -> list[str]:
 def validate_document_content(document_data: dict) -> list[str]:
     warnings = []
 
+    # Check document title
     if not document_data.get("title"):
-        warnings.append("No document title was extracted.")
+        warnings.append("No document title was extracted")
 
+    # Check full transcription
     if not document_data.get("full_text"):
         warnings.append("No readable full transcription was returned.")
 
-    for index, item in enumerate(document_data.get("key_values", [])):
+    # Check key values
+    for item in document_data.get("key_values", []):
         if not item.get("label", "").strip():
-            warnings.append(f"Key-value item {index + 1} has an empty label.")
+            warnings.append("A key-value item has an empty label.")
+
+    # Check table consistency
+    for table_index, table in enumerate(document_data.get("tables", []), start=1):
+        headers = table.get("headers", [])
+        rows = table.get("rows", [])
+
+        for row_index, row in enumerate(rows, start=1):
+            if len(row) != len(headers):
+                warnings.append(
+                    f"Table {table_index}, row {row_index}: "
+                    f"expected {len(headers)} cells, "
+                    f"but received {len(row)}."
+                )
 
     return warnings
 
 
-# Validate JSON text
-def validate_json_text(json_text: str) -> tuple[dict | None, list[str]]:
+# # Validate JSON text
+# def validate_json_text(json_text: str) -> tuple[dict | None, list[str]]:
 
-    try:
-        document_data = json.loads(json_text)
+#     try:
+#         document_data = json.loads(json_text)
 
-    except json.JSONDecodeError as error:
-        return None, [f"Invalid JSON: {error}"]
+#     except json.JSONDecodeError as error:
+#         return None, [f"Invalid JSON: {error}"]
 
-    if not isinstance(document_data, dict):
-        return None, ["The JSON root must be an object."]
+#     if not isinstance(document_data, dict):
+#         return None, ["The JSON root must be an object."]
 
-    errors = validate_document_structure(document_data)
+#     errors = validate_document_structure(document_data)
 
-    if errors:
-        return None, errors
+#     if errors:
+#         return None, errors
 
-    return document_data, []
-
-
-def validate_table_consistency(document_data: dict) -> list[str]:
-    """
-    Check whether every table row has the same number
-    of cells as the table has headers.
-    """
-    errors = []
-
-    for table_index, table in enumerate(document_data.get("tables", [])):
-        headers = table.get("headers", [])
-        rows = table.get("rows", [])
-
-        expected_cells = len(headers)
-
-        for row_index, row in enumerate(rows):
-            actual_cells = len(row)
-
-            if actual_cells != expected_cells:
-                errors.append(
-                    f"Table {table_index + 1}, "
-                    f"row {row_index + 1}: expected "
-                    f"{expected_cells} cells, but found "
-                    f"{actual_cells}."
-                )
-
-    return errors
+#     return document_data, []

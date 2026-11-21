@@ -53,18 +53,11 @@ OCR_SCHEMA = {
         "full_text": {"type": "string"},
         "key_values": {
             "type": "array",
-            "description": "Fields extracted from the document as label-value pairs.",
             "items": {
                 "type": "object",
                 "properties": {
-                    "label": {
-                        "type": "string",
-                        "description": "The field name or label shown in the document.",
-                    },
-                    "value": {
-                        "type": "string",
-                        "description": "The corresponding value transcribed from the document.",
-                    },
+                    "label": {"type": "string"},
+                    "value": {"type": "string"},
                 },
                 "required": ["label", "value"],
                 "additionalProperties": False,
@@ -72,23 +65,14 @@ OCR_SCHEMA = {
         },
         "tables": {
             "type": "array",
-            "description": "All tables detected in the document, kept separately.",
             "items": {
                 "type": "object",
                 "properties": {
-                    "title": {
-                        "type": "string",
-                        "description": "The table title, or an empty string if none is visible.",
-                    },
-                    "headers": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Column headers in their original left-to-right order.",
-                    },
+                    "title": {"type": "string"},
+                    "headers": {"type": "array", "items": {"type": "string"}},
                     "rows": {
                         "type": "array",
                         "items": {"type": "array", "items": {"type": "string"}},
-                        "description": "Table rows, with each row containing one string per header.",
                     },
                 },
                 "required": ["title", "headers", "rows"],
