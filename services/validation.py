@@ -1,5 +1,3 @@
-import json
-
 from jsonschema import Draft202012Validator
 
 from .openai_service import OCR_SCHEMA
