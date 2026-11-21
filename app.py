@@ -3,6 +3,7 @@ import io
 import json
 
 import openai
+import pandas as pd
 import streamlit as st
 from PIL import Image, UnidentifiedImageError
 
@@ -11,7 +12,11 @@ from services.openai_service import (
     extract_document_from_image,
     format_ocr_as_markdown,
 )
-from services.validation import validate_document_content, validate_document_structure
+from services.validation import (
+    validate_document_content,
+    validate_document_structure,
+    validate_table_consistency,
+)
 
 # =========================================
 # Page configuration
@@ -124,7 +129,13 @@ if uploaded_file is not None:
                 )
 
                 # Check JSON structure against our schema
-                validation_errors = validate_document_structure(document_data)
+                schema_errors = validate_document_structure(document_data)
+
+                # Validate table consistency
+                table_errors = validate_table_consistency(document_data)
+
+                # Combine errors
+                validation_errors = schema_errors + table_errors
 
                 if validation_errors:
                     error_details = "\n".join(validation_errors)
@@ -137,14 +148,56 @@ if uploaded_file is not None:
                 validation_warnings = validate_document_content(document_data)
 
                 if validation_warnings:
-                    st.warning(
-                        "The Document was extracted, but some content checks raised warnings."
-                    )
-
                     for warning in validation_warnings:
-                        st.write(f"- {warning}")
+                        st.warning(f"- {warning}")
                 else:
-                    st.success("Document structure and content checks passed.")
+                    st.success("Document validation completed successfully.")
+
+                # Display extracted key-value fields
+                st.subheader("Extracted Key-Value fields")
+
+                key_values = document_data.get("key_values", [])
+
+                if key_values:
+                    key_value_data = [
+                        {"Field": item["label"], "Value": item["value"]}
+                        for item in key_values
+                    ]
+
+                    st.dataframe(
+                        pd.DataFrame(key_value_data),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+                else:
+                    st.info("No key-value fields were detected.")
+
+                # Display extracted tables
+                st.subheader("Extracted Tables")
+
+                tables = document_data.get("tables", [])
+
+                if tables:
+                    for index, table in enumerate(tables):
+                        table_title = table.get("title") or f"Table {index + 1}"
+
+                        st.markdown(f"**{table_title}**")
+
+                        headers = table.get("headers", [])
+                        rows = table.get("rows", [])
+
+                        if rows:
+                            table_dataframe = pd.DataFrame(rows, columns=headers)
+
+                            st.dataframe(
+                                table_dataframe,
+                                use_container_width=True,
+                                hide_index=True,
+                            )
+                        else:
+                            st.info("This table contains no extracted data rows.")
+                else:
+                    st.info("No tables were detected.")
 
                 # Convert the structured data to Markdown
                 markdown_result = format_ocr_as_markdown(document_data)

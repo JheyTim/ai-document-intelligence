@@ -25,13 +25,42 @@ information that is actually visible.
 
 # Key-value extraction
 
-Extract a label and its value only when their
-relationship is visibly established.
+- Extract important fields as separate label-value pairs.
+- Preserve each label and its corresponding value exactly as shown.
+- Do not invent values or fill in missing information.
+- If a printed field has a label but no visible value, include
+  the label and use an empty string for its value.
+- Preserve repeated fields as separate entries when they appear
+  separately in the document.
+- Do not normalize dates, currencies, numbers, or other values.
+- If no key-value fields are present, return an empty array.
 
 # Table extraction
 
-Preserve the original headers and row relationships.
-Do not move values between columns.
+- Identify every distinct table in the document.
+- Keep separate tables as separate objects.
+- Preserve the original reading order of tables, columns, and rows.
+- Extract the original column headers from left to right.
+- Do not invent column headers.
+- If a table has no visible headers, use empty strings as
+  placeholders in the headers array, one for each column.
+- Every row must contain exactly the same number of cells
+  as there are headers.
+- Preserve the original order of all cell values.
+- Represent a genuinely blank cell using an empty string.
+- If text is visible but cannot be read, use "[Unclear]".
+- Preserve currency symbols, decimal places, punctuation,
+  and meaningful line breaks.
+- Do not combine separate tables or move a value to another
+  row or column.
+- If no tables are present, return an empty array.
+
+IMPORTANT
+
+- Do not guess missing values.
+- Do not calculate totals or correct apparent mistakes.
+- Extract what is visible in the document, not what you
+  believe should be present.
 
 # Missing information
 
